@@ -5,6 +5,7 @@ import logging
 import os
 from typing import List, Optional, Tuple, Type, TypeVar
 
+import transformers
 from sqlitedict import SqliteDict
 from tqdm import tqdm
 
@@ -284,10 +285,9 @@ class TemplateLM(LM):
         pass
 
     @property
-    @abc.abstractmethod
     def prefix_token_id(self):
         # it is used as prefix for loglikelihood
-        pass
+        return self.eot_token_id
 
     @abc.abstractmethod
     def tok_encode(self, string: str, **kwargs):
@@ -303,11 +303,17 @@ class TemplateLM(LM):
             continuation = context[-n_spaces:] + continuation
             context = context[:-n_spaces]
 
-        whole_enc = self.tok_encode(context + continuation)
-        context_enc = self.tok_encode(context)
+        model_class = getattr(self, "AUTO_MODEL_CLASS", None)
 
-        context_enc_len = len(context_enc)
-        continuation_enc = whole_enc[context_enc_len:]
+        if model_class == transformers.AutoModelForSeq2SeqLM:
+            context_enc = self.tok_encode(context)
+            continuation_enc = self.tok_encode(continuation, add_special_tokens=False)
+        else:
+            whole_enc = self.tok_encode(context + continuation)
+            context_enc = self.tok_encode(context)
+
+            context_enc_len = len(context_enc)
+            continuation_enc = whole_enc[context_enc_len:]
 
         return context_enc, continuation_enc
 
